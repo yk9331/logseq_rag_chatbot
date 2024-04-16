@@ -1,12 +1,14 @@
 {
-  "name": "logseq-rag",
+  "name": "logseq-rag-plugin",
+  "author": "Yen-Chen Kuo",
   "version": "0.0.1",
   "description": "A retrieval augmented generation (RAG) based LLM plugin for Logseq ",
   "main": "dist/index.html",
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preinstall": "npx only-allow pnpm"
+    "preinstall": "npx only-allow pnpm",
+    "lint": "npx eslint ./src --ignore-path .eslintignore --fix"
   },
   "license": "MIT",
   "dependencies": {
@@ -28,9 +30,11 @@
     "autoprefixer": "10.4.16",
     "conventional-changelog-conventionalcommits": "5.0.0",
     "eslint": "8.53.0",
+    "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-react": "7.33.2",
     "eslint-plugin-react-hooks": "4.6.0",
     "postcss": "8.4.31",
+    "prettier": "^3.2.5",
     "semantic-release": "21.1.2",
     "tailwindcss": "3.3.5",
     "typescript": "4.9.5",
@@ -38,7 +42,8 @@
     "vite-plugin-logseq": "1.1.2"
   },
   "logseq": {
+    "name": "logseq-rag-plugin",
     "id": "_yq5sga3yh",
-    "icon": "./logo.svg"
+    "icon": "./logo.png"
   }
 }
