@@ -13,6 +13,7 @@ import { useImmer } from 'use-immer';
 import './style.css';
 import { ChatMessage } from './components/ChatMesssage';
 import { buildPageQAChain } from '../lib/langchain';
+import { useAppVisible } from '../lib/utils';
 
 export type AppState = PendingState | LoadingState | ReadyState | ErrorState;
 export interface PendingState {
@@ -64,17 +65,18 @@ const defaultChatState: ChatState = {
 };
 
 export const LogseqRAG = () => {
+    const visible = useAppVisible();
     const [appState, updateAppState] = useImmer<AppState>(defaultAppState);
     const [chatState, updateChatState] = useImmer<ChatState>(defaultChatState);
     const [chatHistory, updateChatHistory] = useImmer<Array<ChatMessage>>([]);
     const [previousMessage, setPreviousMessage] = useState<ChatMessage | null>(null);
-
     const [query, setQuery] = useState('');
-    const chatDisabled = appState.status !== 'ready' && chatState.status != 'ready';
+    
+    const chatDisabled = appState.status !== 'ready' || chatState.status != 'ready' || !query;
 
     useEffect(() => {
         const preparePage = async () => {
-            if (appState.status == 'pending') {
+            if (visible && appState.status == 'pending') {
                 const currentPage = (await logseq.Editor.getCurrentPage()) as PageEntity;
                 if (!currentPage) {
                     updateAppState({
@@ -96,7 +98,7 @@ export const LogseqRAG = () => {
             }
         };
         preparePage();
-    }, [appState, updateAppState]);
+    }, [visible]);
 
     async function runChatMessage() {
         const chatMessage = {
@@ -112,7 +114,6 @@ export const LogseqRAG = () => {
         updateChatHistory((draft) => {
             draft.push(chatMessage);
         });
-        console.log(appState.status);
         if (appState.status === 'ready') {
             const result = await appState.qaChain.call({ query });
             updateChatHistory((draft) => {
