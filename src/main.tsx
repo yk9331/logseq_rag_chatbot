@@ -1,6 +1,7 @@
 import '@logseq/libs';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import CssBaseline from '@mui/material/CssBaseline';
 
 import './ui/style.css';
 import { settingsSchema } from './lib/setting';
@@ -11,15 +12,7 @@ function createModel() {
 }
 
 async function openRag() {
-    const currentPage = await logseq.Editor.getCurrentPage();
-    if (!currentPage) {
-        logseq.UI.showMsg('Navigate to a specific page to open rag chat', 'warning');
-        return;
-    }
     logseq.showMainUI({ autoFocus: true });
-    setTimeout(() => {
-        document.getElementById('logseq-rag-search')?.focus();
-    }, 100);
 };
 
 async function main() {
@@ -47,6 +40,7 @@ async function main() {
     const root = ReactDOM.createRoot(document.getElementById('app')!);
     root.render(
         <React.StrictMode>
+            <CssBaseline />
             <LogseqRAG />
         </React.StrictMode>,
     );

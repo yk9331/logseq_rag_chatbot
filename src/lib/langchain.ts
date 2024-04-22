@@ -8,8 +8,8 @@ import { SupabaseVectorStore } from '@langchain/community/vectorstores/supabase'
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { backOff } from 'exponential-backoff';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
-import { getPageContent } from './logseq';
-import { getOpenaiSettings } from './setting';
+import { getPagesContents } from './logseq';
+import { getOpenaiSettings as getPluginSettings } from './setting';
 
 export interface OpenAIOptions {
     apiKey: string;
@@ -58,35 +58,42 @@ const retryOptions = {
     },
 };
 
-export async function buildPageQAChain(page: PageEntity): Promise<RetrievalQAChain> {
-    const openAISettings = getOpenaiSettings();
-    
-    const { ids, blockContents } = await getPageContent(page.id);
-    const blockMetadatas = ids.map((blockId: string) => {
-        return {
-            block_id: blockId,
-            page_id: page.uuid,
-        };
-    });
+export async function buildPageVectors(uuid: string, includeLinkedPages: boolean): Promise<Array<PageEntity>> {
+    const settings = getPluginSettings();
+
+    const pages = await getPagesContents(uuid, includeLinkedPages);
+
+    const docs = [];
     const splitter = RecursiveCharacterTextSplitter.fromLanguage('markdown', {
         chunkSize: CHUNK_SIZE,
         chunkOverlap: CHUNK_OVERLAP,
     });
-    const docs = await splitter.createDocuments(blockContents, blockMetadatas);
 
-    const client = createClient('http://127.0.0.1:8000', openAISettings.supabaseServiceKey!);
-    const vectorstore = await SupabaseVectorStore.fromDocuments(docs, new OpenAIEmbeddings({apiKey:openAISettings.apiKey}), {
-        client,
-        tableName: 'documents',
-        queryName: 'match_documents',
-    });
-    const llm = new ChatOpenAI({
-        apiKey: openAISettings.apiKey,
-        model: openAISettings.completionEngine,
-        temperature: openAISettings.temperature,
-    });
-    const qaChain = RetrievalQAChain.fromLLM(llm, vectorstore.asRetriever());
-    return qaChain;
+    for (const { page, ids, blockContents } of pages) {
+        const blockMetadatas = ids.map((blockId: string) => {
+            return {
+                block_id: blockId,
+                page_id: page.uuid,
+            };
+        });
+        const splittedBlocks = await splitter.createDocuments(blockContents, blockMetadatas);
+        docs.push(...splittedBlocks)
+    }
+
+    const client = createClient('http://127.0.0.1:8000', settings.supabaseServiceKey!);
+    // TODO: check page updatedTime
+    // if ( > vectorstore page.updatedTime) {delete and recreate page}
+    const vectorstore = await SupabaseVectorStore.fromDocuments(
+        docs,
+        new OpenAIEmbeddings({ apiKey: settings.apiKey }),
+        {
+            client,
+            tableName: 'documents',
+            queryName: 'match_documents',
+        },
+    );
+
+    return pages.map(p => p.page);
 }
 
 export async function openAIWithStream(

@@ -1,195 +1,175 @@
-import '@logseq/libs';
-import { PageEntity, BlockEntity } from '@logseq/libs/dist/LSPlugin.user';
-import React, { useState, useEffect } from 'react';
-import Box from '@mui/material/Box';
+'use client';
+
+import React, { useEffect, useState } from 'react';
+import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import TextField from '@mui/material/TextField';
-import Button from '@mui/material/Button';
-import Modal from '@mui/material/Modal';
-import List from '@mui/material/List';
-import ListItem from '@mui/material/ListItem';
-import { RetrievalQAChain } from 'langchain/chains';
-import { useImmer } from 'use-immer';
+import Autocomplete from '@mui/material/Autocomplete';
+import { Box, Checkbox, FormGroup, FormControlLabel, Typography, Button, Backdrop, Modal } from '@mui/material';
 
-import './style.css';
-import { ChatMessage } from './components/ChatMesssage';
-import { buildPageQAChain } from '../lib/langchain';
 import { useAppVisible } from '../lib/utils';
+import { PageUploader } from './components/PageUploader';
+import { LoadingMessage } from './components/LoadingMessage';
 
-export type AppState = PendingState | LoadingState | ReadyState | ErrorState;
-export interface PendingState {
-    status: 'pending';
-}
-export interface LoadingState {
-    status: 'loading';
-    page: PageEntity;
-}
-export interface ReadyState {
-    status: 'ready';
-    page: PageEntity;
-    qaChain: RetrievalQAChain;
-}
-export interface ErrorState {
-    status: 'error';
-    page?: PageEntity | BlockEntity | null;
-    qaChain?: RetrievalQAChain | null;
-    error: Error;
-}
+const CHAT_EMOJI = '🤖';
+const CHAT_TITLE = 'Logseq Chatbot';
+const PLACEHOLDER = 'Ask me something about your Logseq page.';
 
-export interface ChatMessage {
-    query: string;
-    prompt: string;
-    temperature?: number;
-    queryTimestamp: EpochTimeStamp;
-    result?: string;
-    anwserTimestamp?: EpochTimeStamp;
-}
-
-export type ChatState = ChatReadyState | ChatSuccessState | ChatErrorState;
-export interface ChatReadyState {
-    status: 'ready' | 'running';
-}
-export interface ChatSuccessState {
-    status: 'success';
-    result: string;
-}
-export interface ChatErrorState {
-    status: 'error';
-    error: Error;
-}
-
-const defaultAppState: AppState = {
-    status: 'pending',
-};
-const defaultChatState: ChatState = {
-    status: 'ready',
-};
-
-export const LogseqRAG = () => {
+export function LogseqRAG() {
     const visible = useAppVisible();
-    const [appState, updateAppState] = useImmer<AppState>(defaultAppState);
-    const [chatState, updateChatState] = useImmer<ChatState>(defaultChatState);
-    const [chatHistory, updateChatHistory] = useImmer<Array<ChatMessage>>([]);
-    const [previousMessage, setPreviousMessage] = useState<ChatMessage | null>(null);
+    const [pages, setPages] = useState<Array<PageEntity> | null>(null);
+    const [selectedPage, setSelectedPage] = useState<PageEntity | null>(null);
+    const [includeLinkedPages, setIncludeLinkedPages] = useState(true);
+    const [selectedPageLoaded, setSelectedPageLoaded] = useState(false);
+    const [includedPages, setIncludedPages] = useState<Array<PageEntity> | null>(null);
     const [query, setQuery] = useState('');
-    
-    const chatDisabled = appState.status !== 'ready' || chatState.status != 'ready' || !query;
 
     useEffect(() => {
-        const preparePage = async () => {
-            console.log("prepare")
-            if (visible && appState.status == 'pending') {
-                const currentPage = (await logseq.Editor.getCurrentPage()) as PageEntity;
-                if (!currentPage) {
-                    updateAppState({
-                        status: 'error',
-                        error: new Error('Page not set'),
-                    });
-                    return;
-                }
-                updateAppState({
-                    status: 'loading',
-                    page: currentPage,
-                });
-                const qaChain = await buildPageQAChain(currentPage);
-                updateAppState({
-                    status: 'ready',
-                    page: currentPage,
-                    qaChain: qaChain,
-                });
-            }
-        };
-        preparePage();
-    }, [visible]);
-
-    async function runChatMessage() {
-        const chatMessage = {
-            query,
-            prompt: query,
-            queryTimestamp: Date.now(),
-            open: true,
-        };
-        setPreviousMessage(chatMessage);
-        updateChatState((draft) => {
-            draft.status = 'running';
-        });
-        updateChatHistory((draft) => {
-            draft.push(chatMessage);
-        });
-        if (appState.status === 'ready') {
-            const result = await appState.qaChain.call({ query });
-            updateChatHistory((draft) => {
-                if (result.text.length && draft.length) {
-                    draft[draft.length - 1].result = result.text;
-                    draft[draft.length - 1].anwserTimestamp = Date.now();
-                }
-            });
+        if (visible) {
+            const getPages = async () => {
+                const pages = await logseq.Editor.getAllPages();
+                setPages(pages);
+            };
+            getPages();
         }
+    }, [visible, setPages]);
+
+    if (!pages) {
+        return (
+            <Backdrop sx={{ color: '#fff', zIndex: (theme) => theme.zIndex.drawer + 1 }} open={true}>
+                <LoadingMessage />
+            </Backdrop>
+        );
     }
 
-    // TODO Insert full chat history to page
-    // const onInsertFullChat = async () => {
-    // };
-
-    // TODO Insert last chat message to page
-    // const onInsert = async () => {
-    //     const result = history[history.length - 1];
-    //     if (appState.status == 'ready') {
-    //         logseq.Editor.prependBlockInPage(appState.page.uuid, result);
-    //     }
-    //     logseq.hideMainUI({ restoreEditingCursor: true });
-    // };
+    async function sendMessage(e) {
+        e.preventDefault();
+    }
 
     const onClose = () => {
+        setSelectedPage(null);
         setQuery('');
-        updateChatHistory([]);
-        updateAppState(defaultAppState);
-        updateChatState(defaultChatState);
+        // updateChatHistory([]);
+        // updateAppState(defaultAppState);
+        // updateChatState(defaultChatState);
         logseq.hideMainUI({ restoreEditingCursor: true });
     };
 
     return (
-        <Modal open={true} onClose={onClose} className="flex items-center justify-center">
-            <div className="container bg-white max-w-3xl mx-auto rounded-lg shadow-2xl fixed p-4 ">
-                <List
-                    sx={{
-                        width: '100%',
-                        position: 'relative',
-                        overflow: 'scroll',
-                        'overflow-wrap': 'break-word',
-                        'overflow-x': 'hidden',
-                        'overflow-y': 'auto',
-                        maxHeight: 500,
-                    }}
-                >
-                    {chatHistory.map((item) => {
-                        return (
-                            <ListItem key={`item-${item.queryTimestamp}`} disablePadding={true}>
-                                <ChatMessage
-                                    query={item.query}
-                                    result={item.result}
-                                    queryTimestamp={item.queryTimestamp}
-                                ></ChatMessage>
-                            </ListItem>
-                        );
-                    })}
-                </List>
-                <Box className="flex items-center text-lg font-medium">
-                    <TextField
-                        id="logseq-rag-search"
-                        className="p-5 text-white placeholder-white-200 w-full bg-transparent border-0 outline-none"
-                        autoFocus={true}
-                        placeholder="Ask a question about your page:"
-                        onChange={(e) => {
-                            setQuery(e.target.value);
+        <Modal open={true} onClose={onClose} sx={{ height: '100vh', width: '100%', display: 'flex' }}>
+            <Box
+                display="flex"
+                flexDirection="column"
+                alignItems="start"
+                overflow="auto"
+                sx={{
+                    bgcolor: 'white',
+                    width: '660px',
+                    margin: 'auto',
+                    padding: '30px',
+                    borderRadius: '10px',
+                    marginY: '30px',
+                }}
+            >
+                <Typography variant="h5" marginBottom={2}>
+                    {CHAT_EMOJI} {CHAT_TITLE}
+                </Typography>
+                {/* Page Selector */}
+                <Box display="flex" flexDirection="column" marginBottom={2}>
+                    <Autocomplete
+                        id="page-selector"
+                        sx={{ margin: 'auto', width: '600px' }}
+                        options={pages.filter((p) => !p['journal?']).sort((a, b) => b.updatedAt - a.updatedAt)}
+                        getOptionLabel={(option) => option.originalName}
+                        value={selectedPage}
+                        onChange={(event: any, page: PageEntity | null) => {
+                            setSelectedPage(page);
+                            setSelectedPageLoaded(false);
                         }}
-                        multiline={true}
-                        value={query}
+                        renderInput={(params) => (
+                            <TextField {...params} label="Select the page you want to chat with" />
+                        )}
                     />
-                    <Button disabled={chatDisabled} onClick={runChatMessage}>
+                </Box>
+                {/* Chat Options */}
+                <Box display="flex" flexDirection="row" marginBottom={2}>
+                    <FormGroup>
+                        <FormControlLabel
+                            control={
+                                <Checkbox
+                                    id="include_linked_pages"
+                                    checked={includeLinkedPages}
+                                    onChange={(e) => setIncludeLinkedPages(e.target.checked)}
+                                    inputProps={{ 'aria-label': 'controlled' }}
+                                />
+                            }
+                            label="Include Linked Pages"
+                        />
+                    </FormGroup>
+                </Box>
+                {/* Page Loader Backdrop */}
+                {selectedPage && !selectedPageLoaded ? (
+                    <PageUploader
+                        pageUUID={selectedPage?.uuid}
+                        includeLinkedPages={includeLinkedPages}
+                        setSelectedPageLoaded={setSelectedPageLoaded}
+                        setIncludedPages={setIncludedPages}
+                    />
+                ) : (
+                    ''
+                )}
+                {/* Chat Messages */}
+                <Box
+                    display="flex"
+                    flexDirection="column-reverse"
+                    width="600px"
+                    minHeight="500px"
+                    maxHeight="500px"
+                    overflow="auto"
+                    marginBottom={2}
+                    border={1}
+                    borderRadius={1}
+                    // ref={messageContainerRef}
+                >
+                    {/* {messages.length > 0
+                        ? [...messages].reverse().map((m, i) => {
+                              const sourceKey = (messages.length - 1 - i).toString();
+                              return m.role === 'system' ? (
+                                  <IntermediateStep key={m.id} message={m}></IntermediateStep>
+                              ) : (
+                                  <ChatMessageBubble
+                                      key={m.id}
+                                      message={m}
+                                      aiEmoji={CHAT_EMOJI}
+                                      sources={sourcesForMessages[sourceKey]}
+                                  ></ChatMessageBubble>
+                              );
+                          })
+                        : ''} */}
+                </Box>
+                {/* Chat Inputs */}
+                <Box component="form" display="flex" flexDirection="row">
+                    <TextField
+                        required
+                        multiline
+                        fullWidth
+                        id="chat-input"
+                        rows={3}
+                        label={PLACEHOLDER}
+                        value={query}
+                        // onChange={handleInputChange}
+                        sx={{ margin: 'auto', width: '500px' }}
+                    />
+                    <Button
+                        variant="outlined"
+                        sx={{ width: '90px', marginLeft: '10px' }}
+                        // disabled={chatEndpointIsLoading || intermediateStepsLoading}
+                        onClick={sendMessage}
+                    >
                         Send
                     </Button>
                 </Box>
-            </div>
+                {/* <ToastContainer /> */}
+            </Box>
         </Modal>
     );
-};
+}
