@@ -30,8 +30,9 @@ async function getTreeContent(b: BlockEntity) {
     return content;
 }
 
-export async function getPageContent(id: number): Promise<string> {
+export async function getPageContent(id: number): Promise<any> {
     const blockContents = [];
+    const ids = [];
 
     const page = await logseq.Editor.getPage(id);
     if (!page) {
@@ -43,9 +44,10 @@ export async function getPageContent(id: number): Promise<string> {
         const blockContent = await getTreeContent(pageBlock);
         if (blockContent.length > 0) {
             blockContents.push(blockContent);
+            ids.push(pageBlock.uuid);
         }
     }
-    return blockContents.join(' ');
+    return { page, ids, blockContents };
 }
 
 export async function saveDalleImage(imageURL: string): Promise<string> {

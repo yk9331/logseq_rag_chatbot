@@ -76,6 +76,7 @@ export const LogseqRAG = () => {
 
     useEffect(() => {
         const preparePage = async () => {
+            console.log("prepare")
             if (visible && appState.status == 'pending') {
                 const currentPage = (await logseq.Editor.getCurrentPage()) as PageEntity;
                 if (!currentPage) {

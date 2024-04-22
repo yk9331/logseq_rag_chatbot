@@ -3,9 +3,17 @@ import { OpenAIOptions } from './langchain';
 
 interface PluginOptions extends OpenAIOptions {
     injectPrefix?: string;
+    supabaseServiceKey?: string
 }
 
 export const settingsSchema: SettingSchemaDesc[] = [
+    {
+        key: 'supabaseServiceKey',
+        type: 'string',
+        default: '',
+        title: 'Supabase Service Key',
+        description: '',
+    },
     {
         key: 'openAIKey',
         type: 'string',
@@ -62,6 +70,7 @@ export const settingsSchema: SettingSchemaDesc[] = [
 ];
 
 export function getOpenaiSettings(): PluginOptions {
+    const supabaseServiceKey = logseq.settings!['supabaseServiceKey'];
     const apiKey = logseq.settings!['openAIKey'];
     const completionEngine = logseq.settings!['openAICompletionEngine'];
     const temperature = Number.parseFloat(logseq.settings!['openAITemperature']);
@@ -69,6 +78,7 @@ export function getOpenaiSettings(): PluginOptions {
     const chatPrompt = logseq.settings!['chatPrompt'];
     const completionEndpoint = logseq.settings!['chatCompletionEndpoint'];
     return {
+        supabaseServiceKey,
         apiKey,
         completionEngine,
         completionEndpoint,

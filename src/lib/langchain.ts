@@ -1,10 +1,10 @@
 import '@logseq/libs';
 import { OpenAI } from 'openai';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
-import { MemoryVectorStore } from 'langchain/vectorstores/memory';
 import { ChatOpenAI } from '@langchain/openai';
 import { RetrievalQAChain } from 'langchain/chains';
-
+import { createClient } from '@supabase/supabase-js';
+import { SupabaseVectorStore } from '@langchain/community/vectorstores/supabase';
 import { OpenAIEmbeddings } from '@langchain/openai';
 import { backOff } from 'exponential-backoff';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
@@ -60,22 +60,32 @@ const retryOptions = {
 
 export async function buildPageQAChain(page: PageEntity): Promise<RetrievalQAChain> {
     const openAISettings = getOpenaiSettings();
-    const blockContent = await getPageContent(page.id);
+    
+    const { ids, blockContents } = await getPageContent(page.id);
+    const blockMetadatas = ids.map((blockId: string) => {
+        return {
+            block_id: blockId,
+            page_id: page.uuid,
+        };
+    });
     const splitter = RecursiveCharacterTextSplitter.fromLanguage('markdown', {
         chunkSize: CHUNK_SIZE,
         chunkOverlap: CHUNK_OVERLAP,
     });
-    const docs = await splitter.createDocuments([blockContent]);
-    const vectorDB = await MemoryVectorStore.fromDocuments(
-        docs,
-        new OpenAIEmbeddings({ openAIApiKey: openAISettings.apiKey }),
-    );
+    const docs = await splitter.createDocuments(blockContents, blockMetadatas);
+
+    const client = createClient('http://127.0.0.1:8000', openAISettings.supabaseServiceKey!);
+    const vectorstore = await SupabaseVectorStore.fromDocuments(docs, new OpenAIEmbeddings({apiKey:openAISettings.apiKey}), {
+        client,
+        tableName: 'documents',
+        queryName: 'match_documents',
+    });
     const llm = new ChatOpenAI({
         apiKey: openAISettings.apiKey,
         model: openAISettings.completionEngine,
         temperature: openAISettings.temperature,
     });
-    const qaChain = RetrievalQAChain.fromLLM(llm, vectorDB.asRetriever());
+    const qaChain = RetrievalQAChain.fromLLM(llm, vectorstore.asRetriever());
     return qaChain;
 }
 
