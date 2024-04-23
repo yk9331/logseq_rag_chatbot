@@ -4,29 +4,35 @@ import React, { useEffect } from 'react';
 import Backdrop from '@mui/material/Backdrop';
 import { LoadingMessage } from './LoadingMessage';
 import { LogseqErrorMessage } from './LogseqErrorMessage';
-import { buildPageVectors } from '../../lib/langchain';
+import { buildPageVectors, buildRagChatChain } from '../../lib/langchain';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin.user';
+import { RunnableSequence } from '@langchain/core/runnables';
 
-export function PageUploader(props: {
+export function RagChainBuilder(props: {
     pageUUID: string;
     includeLinkedPages: boolean;
     setSelectedPageLoaded: React.Dispatch<React.SetStateAction<boolean>>;
     setIncludedPages: React.Dispatch<React.SetStateAction<Array<PageEntity> | null>>;
+    setRagChain: React.Dispatch<React.SetStateAction<RunnableSequence<any, string> | null>>;
 }) {
     const [open, setOpen] = React.useState(true);
     const [error, setError] = React.useState(null);
-    const { pageUUID, includeLinkedPages, setSelectedPageLoaded, setIncludedPages } = props;
+    const { pageUUID, includeLinkedPages, setSelectedPageLoaded, setIncludedPages, setRagChain } = props;
 
     useEffect(() => {
-        buildPageVectors(pageUUID, includeLinkedPages)
-            .then((pages) => {
+        const build = async () => {
+            try {
+                const pages = await buildPageVectors(pageUUID, includeLinkedPages);
+                const chain = await buildRagChatChain(pages);
                 setIncludedPages(pages);
+                setRagChain(chain);
                 setSelectedPageLoaded(true);
-            })
-            .catch((e) => {
+            } catch (e) {
                 setError(e);
-            });
-    }, [pageUUID, includeLinkedPages, setSelectedPageLoaded, setIncludedPages]);
+            }
+        };
+        build();
+    }, []);
 
     const handleClose = (e) => {
         setOpen(false);

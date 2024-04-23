@@ -1,14 +1,18 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useImmer } from 'use-immer';
+import { RunnableSequence } from '@langchain/core/runnables';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
 import { Box, Checkbox, FormGroup, FormControlLabel, Typography, Button, Backdrop, Modal } from '@mui/material';
 
 import { useAppVisible } from '../lib/utils';
-import { PageUploader } from './components/PageUploader';
+import { RagChainBuilder } from './components/RagChainBuilder';
 import { LoadingMessage } from './components/LoadingMessage';
+import { ChatMessageBubble } from './components/ChatMessageBubble';
+import { IntermediateStep } from './components/IntermediateStep';
 
 const CHAT_EMOJI = '🤖';
 const CHAT_TITLE = 'Logseq Chatbot';
@@ -19,9 +23,13 @@ export function LogseqRAG() {
     const [pages, setPages] = useState<Array<PageEntity> | null>(null);
     const [selectedPage, setSelectedPage] = useState<PageEntity | null>(null);
     const [includeLinkedPages, setIncludeLinkedPages] = useState(true);
+
     const [selectedPageLoaded, setSelectedPageLoaded] = useState(false);
     const [includedPages, setIncludedPages] = useState<Array<PageEntity> | null>(null);
+    const [ragChain, setRagChain] = useState<RunnableSequence<any, string> | null>(null);
     const [query, setQuery] = useState('');
+    const [isLoadingAnswer, setIsLoadingAnswer] = useState<boolean>(false);
+    const [messages, updateMessages] = useImmer<Array<any>>([]);
 
     useEffect(() => {
         if (visible) {
@@ -43,14 +51,34 @@ export function LogseqRAG() {
 
     async function sendMessage(e) {
         e.preventDefault();
+        if (!ragChain || isLoadingAnswer) {
+            return;
+        }
+        setIsLoadingAnswer(true);
+        const messageLength = messages.length;
+        const userMessage = { id: messageLength, content: query, role: 'user' };
+        setQuery('');
+        updateMessages((messages) => {
+            messages.push(userMessage);
+        });
+        const systemMessage = { id: messageLength + 1, content: '', role: 'assistant' };
+        updateMessages((messages) => {
+            messages.push(systemMessage);
+        });
+        for await (const chunk of await ragChain.stream(userMessage.content)) {
+            updateMessages((messages) => {
+                messages[messageLength + 1].content += chunk;
+            });
+        }
+        setIsLoadingAnswer(false);
     }
 
     const onClose = () => {
-        setSelectedPage(null);
         setQuery('');
         // updateChatHistory([]);
         // updateAppState(defaultAppState);
         // updateChatState(defaultChatState);
+        updateMessages([]);
         logseq.hideMainUI({ restoreEditingCursor: true });
     };
 
@@ -74,7 +102,7 @@ export function LogseqRAG() {
                     {CHAT_EMOJI} {CHAT_TITLE}
                 </Typography>
                 {/* Page Selector */}
-                <Box display="flex" flexDirection="column" marginBottom={2}>
+                <Box display="flex" flexDirection="column">
                     <Autocomplete
                         id="page-selector"
                         sx={{ margin: 'auto', width: '600px' }}
@@ -108,11 +136,12 @@ export function LogseqRAG() {
                 </Box>
                 {/* Page Loader Backdrop */}
                 {selectedPage && !selectedPageLoaded ? (
-                    <PageUploader
+                    <RagChainBuilder
                         pageUUID={selectedPage?.uuid}
                         includeLinkedPages={includeLinkedPages}
                         setSelectedPageLoaded={setSelectedPageLoaded}
                         setIncludedPages={setIncludedPages}
+                        setRagChain={setRagChain}
                     />
                 ) : (
                     ''
@@ -122,29 +151,23 @@ export function LogseqRAG() {
                     display="flex"
                     flexDirection="column-reverse"
                     width="600px"
-                    minHeight="500px"
-                    maxHeight="500px"
+                    minHeight="460px"
+                    maxHeight="460px"
                     overflow="auto"
                     marginBottom={2}
                     border={1}
                     borderRadius={1}
                     // ref={messageContainerRef}
                 >
-                    {/* {messages.length > 0
+                    {messages.length > 0
                         ? [...messages].reverse().map((m, i) => {
-                              const sourceKey = (messages.length - 1 - i).toString();
                               return m.role === 'system' ? (
                                   <IntermediateStep key={m.id} message={m}></IntermediateStep>
                               ) : (
-                                  <ChatMessageBubble
-                                      key={m.id}
-                                      message={m}
-                                      aiEmoji={CHAT_EMOJI}
-                                      sources={sourcesForMessages[sourceKey]}
-                                  ></ChatMessageBubble>
+                                  <ChatMessageBubble key={m.id} message={m} aiEmoji={CHAT_EMOJI}></ChatMessageBubble>
                               );
                           })
-                        : ''} */}
+                        : ''}
                 </Box>
                 {/* Chat Inputs */}
                 <Box component="form" display="flex" flexDirection="row">
@@ -153,16 +176,18 @@ export function LogseqRAG() {
                         multiline
                         fullWidth
                         id="chat-input"
-                        rows={3}
+                        rows={2}
                         label={PLACEHOLDER}
                         value={query}
-                        // onChange={handleInputChange}
+                        onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                            setQuery(event.target.value);
+                        }}
                         sx={{ margin: 'auto', width: '500px' }}
                     />
                     <Button
                         variant="outlined"
                         sx={{ width: '90px', marginLeft: '10px' }}
-                        // disabled={chatEndpointIsLoading || intermediateStepsLoading}
+                        disabled={!selectedPageLoaded || !ragChain || isLoadingAnswer}
                         onClick={sendMessage}
                     >
                         Send

@@ -50,7 +50,7 @@ async function getPageContent(uuid: string): Promise<any> {
     return { page, ids, blockContents };
 }
 
-async function getPageLinkedReferencesContent(uuid: string):Promise<any> {
+async function getPageLinkedReferencesContent(uuid: string): Promise<any> {
     const pages = [];
     const refs = await logseq.Editor.getPageLinkedReferences(uuid);
     for (const ref of refs!) {
@@ -62,7 +62,7 @@ async function getPageLinkedReferencesContent(uuid: string):Promise<any> {
     return pages;
 }
 
-export async function getPagesContents(uuid: string, includeLinkedPages: boolean) {
+export async function getPageContents(uuid: string, includeLinkedPages: boolean) {
     const pages = [];
     const page = await getPageContent(uuid);
     pages.push(page);

@@ -3,16 +3,24 @@ import { OpenAIOptions } from './langchain';
 
 interface PluginOptions extends OpenAIOptions {
     injectPrefix?: string;
-    supabaseServiceKey?: string
+    supabaseProjectUrl: string;
+    supabaseServiceKey: string;
 }
 
 export const settingsSchema: SettingSchemaDesc[] = [
+    {
+        key: 'supabaseProjectUrl',
+        type: 'string',
+        default: '',
+        title: 'Supabase Project Url',
+        description: 'Your Supabase project url. You can create a project and get one at https://supabase.com',
+    },
     {
         key: 'supabaseServiceKey',
         type: 'string',
         default: '',
         title: 'Supabase Service Key',
-        description: '',
+        description: 'Your Supabase project service key. You can create a project and get one at https://supabase.com'
     },
     {
         key: 'openAIKey',
@@ -69,15 +77,19 @@ export const settingsSchema: SettingSchemaDesc[] = [
     },
 ];
 
-export function getOpenaiSettings(): PluginOptions {
+export function getPluginSettings(): PluginOptions {
+    const supabaseProjectUrl = logseq.settings!['supabaseProjectUrl'];
     const supabaseServiceKey = logseq.settings!['supabaseServiceKey'];
+
     const apiKey = logseq.settings!['openAIKey'];
     const completionEngine = logseq.settings!['openAICompletionEngine'];
     const temperature = Number.parseFloat(logseq.settings!['openAITemperature']);
     const maxTokens = Number.parseInt(logseq.settings!['openAIMaxTokens']);
     const chatPrompt = logseq.settings!['chatPrompt'];
     const completionEndpoint = logseq.settings!['chatCompletionEndpoint'];
+    
     return {
+        supabaseProjectUrl,
         supabaseServiceKey,
         apiKey,
         completionEngine,
