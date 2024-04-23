@@ -24,9 +24,7 @@ export interface OpenAIOptions {
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 
-const TEMPLATE = `Use the following pieces of context to answer the question at the end.
-If you don't know the answer, just say that you don't know, don't try to make up an answer.
-Use three sentences maximum and keep the answer as concise as possible.
+const TEMPLATE = `Use the following pieces of context to answer the question at the end. If none of the context answer to the question, just say that you don't know, don't try to make up an answer. Use three sentences maximum and keep the answer as concise as possible. For every sentence you write, add one source id in square brackets of most relevant source at the end of the sentence.
 
 {context}
 
@@ -38,7 +36,8 @@ const customRagPrompt = PromptTemplate.fromTemplate(TEMPLATE);
 
 async function initSupabaseVectorstore(client?: SupabaseClient): Promise<SupabaseVectorStore> {
     const settings = getPluginSettings();
-    const supabase = client !==undefined ? client : createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!)
+    const supabase =
+        client !== undefined ? client : createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!);
 
     const embedding = new OpenAIEmbeddings({ apiKey: settings.apiKey });
     const vectorstore = await SupabaseVectorStore.fromExistingIndex(embedding, {
@@ -59,18 +58,20 @@ function buildRPCPageFilter(pages: Array<PageEntity>): SupabaseFilterRPCCall {
 export async function buildPageVectors(uuid: string, includeLinkedPages: boolean): Promise<Array<PageEntity>> {
     const contents = await getPageContents(uuid, includeLinkedPages);
     const pageIds = contents.map((c) => c.page.uuid);
-    
+
     const settings = getPluginSettings();
     const client = createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!);
-    
+
     const { data, error } = await client.from('pages').select().in('uuid', pageIds);
     const pageUpdatedAt = data?.reduce((obj, p) => Object.assign(obj, { [p.uuid]: p.updated_at }), {});
-    const updatedContent = contents.filter((c) => pageUpdatedAt[c.page.uuid] === undefined || c.page.updatedAt > pageUpdatedAt[c.page.uuid]);
+    const updatedContent = contents.filter(
+        (c) => pageUpdatedAt[c.page.uuid] === undefined || c.page.updatedAt > pageUpdatedAt[c.page.uuid],
+    );
     const updatedIds = updatedContent.map((c) => c.page.uuid);
     await client.from('documents').delete().in('metadata->>page_id', updatedIds);
 
     const docs = [];
-    const splitter = RecursiveCharacterTextSplitter.fromLanguage('markdown', {
+    const splitter = new RecursiveCharacterTextSplitter({
         chunkSize: CHUNK_SIZE,
         chunkOverlap: CHUNK_OVERLAP,
     });
@@ -103,27 +104,41 @@ export async function buildPageVectors(uuid: string, includeLinkedPages: boolean
     return contents.map((p) => p.page);
 }
 
-export async function buildRagChatChain(includedPages: Array<PageEntity>): Promise<RunnableMap<any, any>> {
+export async function buildRagChatChain(includedPages: Array<PageEntity>): Promise<Runnable<any, any, any>> {
     const settings = getPluginSettings();
     const vectorstore = await initSupabaseVectorstore();
-    const retriever = await vectorstore.asRetriever(undefined, buildRPCPageFilter(includedPages));
+    const retriever = await vectorstore.asRetriever(6, buildRPCPageFilter(includedPages));
 
     const llm = new ChatOpenAI({
         model: settings.completionEngine,
         temperature: settings.temperature,
         apiKey: settings.apiKey,
     });
-    const ragChainFromDocs = RunnableSequence.from([
-        RunnablePassthrough.assign({
-            context: (input) => formatDocumentsAsString(input.context),
-        }),
-        customRagPrompt,
-        llm,
-        new StringOutputParser(),
-    ]);
-
-    const ragChainWithSource = new RunnableMap({
-        steps: { context: retriever, question: new RunnablePassthrough() },
+    const formatDocsWithId = (docs: Array<Document>): string => {
+        return (
+            '\n\n' +
+            docs.map((doc: Document, idx: number) => `Source ID: ${idx}\nContent: ${doc.pageContent}`).join('\n\n')
+        );
+    };
+    // const ragChainFromDocs = RunnableSequence.from([
+    //     RunnablePassthrough.assign({
+    //         context: (input) => formatDocumentsAsString(input.context),
+    //     }),
+    //     customRagPrompt,
+    //     llm,
+    //     new StringOutputParser(),
+    // ]);
+    const answerChain = customRagPrompt.pipe(llm).pipe(new StringOutputParser());
+    const ragMap = RunnableMap.from({
+        question: new RunnablePassthrough(),
+        docs: retriever,
     });
-    return ragChainWithSource.assign({ answer: ragChainFromDocs });
+    const ragChain = ragMap
+        .assign({
+            context: (input: { docs: Array<Document> }) => formatDocsWithId(input.docs),
+        })
+        .assign({ answer: answerChain })
+        .pick(['question', 'docs', 'answer']);
+
+    return ragChain;
 }
