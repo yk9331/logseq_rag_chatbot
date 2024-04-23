@@ -64,10 +64,28 @@ export function LogseqRAG() {
         updateMessages((messages) => {
             messages.push(systemMessage);
         });
+        const output = {};
+        let currentKey: string | null = null;
         for await (const chunk of await ragChain.stream(userMessage.content)) {
+            for (const key of Object.keys(chunk)) {
+                if (output[key] === undefined) {
+                    output[key] = chunk[key];
+                } else {
+                    output[key] += chunk[key];
+                }
+
+                if (key !== currentKey) {
+                    console.log(`\n\n${key}: ${JSON.stringify(chunk[key])}`);
+                } else {
+                    console.log(chunk[key]);
+                }
+                currentKey = key;
+            }
             updateMessages((messages) => {
-                messages[messageLength + 1].content += chunk;
+                messages[messageLength + 1].content =
+                    output['answer'] === undefined ? 'Generating...' : output['answer'];
             });
+            console.log(output);
         }
         setIsLoadingAnswer(false);
     }
