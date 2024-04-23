@@ -1,9 +1,7 @@
-'use client';
-
 import React, { useEffect } from 'react';
 import Backdrop from '@mui/material/Backdrop';
 import { LoadingMessage } from './LoadingMessage';
-import { LogseqErrorMessage } from './LogseqErrorMessage';
+import { ErrorMessage } from './ErrorMessage';
 import { buildPageVectors, buildRagChatChain } from '../../lib/langchain';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin.user';
 import { RunnableSequence } from '@langchain/core/runnables';
@@ -45,7 +43,7 @@ export function RagChainBuilder(props: {
                 open={open}
                 onClick={handleClose}
             >
-                <LogseqErrorMessage error={error} />
+                <ErrorMessage error={error} />
             </Backdrop>
         );
     } else {

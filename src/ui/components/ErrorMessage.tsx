@@ -1,6 +1,7 @@
+import React from 'react';
 import { Box, CircularProgress, Typography } from '@mui/material';
 
-export function LogseqErrorMessage(props: { error: any }) {
+export function ErrorMessage(props: { error: any }) {
     return (
         <Box textAlign={'center'}>
             <div>{props?.error?.message}</div>

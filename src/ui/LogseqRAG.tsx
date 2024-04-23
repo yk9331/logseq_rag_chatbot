@@ -14,8 +14,7 @@ import { LoadingMessage } from './components/LoadingMessage';
 import { ChatMessageBubble } from './components/ChatMessageBubble';
 import { IntermediateStep } from './components/IntermediateStep';
 
-const CHAT_EMOJI = '🤖';
-const CHAT_TITLE = 'Logseq Chatbot';
+const CHAT_TITLE = '🤖 Logseq Chatbot';
 const PLACEHOLDER = 'Ask me something about your Logseq page.';
 
 export function LogseqRAG() {
@@ -99,7 +98,7 @@ export function LogseqRAG() {
                 }}
             >
                 <Typography variant="h5" marginBottom={2}>
-                    {CHAT_EMOJI} {CHAT_TITLE}
+                    {CHAT_TITLE}
                 </Typography>
                 {/* Page Selector */}
                 <Box display="flex" flexDirection="column">
@@ -157,14 +156,15 @@ export function LogseqRAG() {
                     marginBottom={2}
                     border={1}
                     borderRadius={1}
+                    justifyContent='flex-start'
                     // ref={messageContainerRef}
                 >
                     {messages.length > 0
-                        ? [...messages].reverse().map((m, i) => {
+                        ? [...messages].reverse().map((m) => {
                               return m.role === 'system' ? (
                                   <IntermediateStep key={m.id} message={m}></IntermediateStep>
                               ) : (
-                                  <ChatMessageBubble key={m.id} message={m} aiEmoji={CHAT_EMOJI}></ChatMessageBubble>
+                                  <ChatMessageBubble key={m.id} message={m}></ChatMessageBubble>
                               );
                           })
                         : ''}

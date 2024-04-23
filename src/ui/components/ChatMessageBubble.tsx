@@ -1,14 +1,28 @@
+import React from 'react';
+import { Box, Typography } from '@mui/material';
 
-
-export function ChatMessageBubble(props: { message: any; aiEmoji?: string }) {
-    const colorClassName = props.message.role === 'user' ? 'bg-sky-600' : 'bg-slate-50 text-black';
-    const alignmentClassName = props.message.role === 'user' ? 'ml-auto' : 'mr-auto';
-    const prefix = props.message.role === 'user' ? '🧑' : props.aiEmoji;
+export function ChatMessageBubble(props: { message: any }) {
+    const { role } = props.message;
+    const bgColor = role === 'user' ? '#87CEFA' : '#DCDCDC';
+    const alignment = role === 'user' ? 'flex-end' : 'flex-start';
+    const prefix = role === 'user' ? '🧑' : '🤖';
     return (
-        <div className={`${alignmentClassName} ${colorClassName} rounded px-4 py-2 max-w-[80%] mb-8 flex`}>
-            <div className="mr-2">{prefix}</div>
-            <div className="whitespace-pre-wrap flex flex-col">
-                <span>{props.message.content}</span>
+        <Box
+            sx={{
+                display: 'flex',
+                bgcolor: bgColor,
+                paddingX: '4px',
+                paddingY: '2px',
+                maxWidth: '80%',
+                borderRadius: '5px',
+                marginBottom: '8px',
+                marginX: '8px',
+                alignSelf: alignment,
+            }}
+        >
+            <Box marginRight={2}>{prefix}</Box>
+            <Box sx={{ display: 'flex', flexDirection: 'column', 'white-space': 'pre-wrap' }}>
+                <Typography variant='body1'>{props.message.content}</Typography>
                 {/* {props.sources && props.sources.length ? (
                     <>
                         <code className="mt-4 mr-auto bg-slate-600 px-2 py-1 rounded">
@@ -34,7 +48,7 @@ export function ChatMessageBubble(props: { message: any; aiEmoji?: string }) {
                 ) : (
                     ''
                 )} */}
-            </div>
-        </div>
+            </Box>
+        </Box>
     );
 }

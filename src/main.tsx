@@ -13,7 +13,7 @@ function createModel() {
 
 async function openRag() {
     logseq.showMainUI({ autoFocus: true });
-};
+}
 
 async function main() {
     logseq.setMainUIInlineStyle({

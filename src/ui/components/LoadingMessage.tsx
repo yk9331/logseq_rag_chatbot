@@ -1,4 +1,5 @@
-import { Box, CircularProgress, Typography } from '@mui/material';
+import React from 'react';
+import { Box, CircularProgress } from '@mui/material';
 
 export function LoadingMessage() {
     return (
