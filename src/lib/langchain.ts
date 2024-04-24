@@ -14,13 +14,11 @@ import { formatDocumentsAsString } from 'langchain/util/document';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { Client } from 'langsmith';
 
-const createLangSmithCallback = (apiUrl: string, apiKey: string) =>
-    new LangChainTracer({
-        projectName: 'logseq-rag',
-        client: new Client({ apiUrl, apiKey }),
-    });
+const LANGSMITH_PROJECT_NAME = 'logseq-rag';
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
+
+let supabaseCilent: SupabaseClient | null = null;
 
 const TEMPLATE = `Use the following pieces of context to answer the question at the end. If none of the context answer to the question, just say that you don't know, don't try to make up an answer. Use three sentences maximum and keep the answer as concise as possible. For every sentence you write, add one source id in square brackets of most relevant source at the end of the sentence.
 
@@ -32,11 +30,25 @@ Helpful Answer:`;
 
 const customRagPrompt = PromptTemplate.fromTemplate(TEMPLATE);
 
-async function initSupabaseVectorstore(client?: SupabaseClient): Promise<SupabaseVectorStore> {
-    const settings = getPluginSettings();
-    const supabase =
-        client !== undefined ? client : createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!);
+function createLangSmithCallback(apiUrl: string, apiKey: string) {
+    return new LangChainTracer({
+        projectName: LANGSMITH_PROJECT_NAME,
+        client: new Client({ apiUrl, apiKey }),
+    });
+}
 
+function getSupabaseClient(): SupabaseClient {
+    if (supabaseCilent) {
+        return supabaseCilent;
+    }
+    const settings = getPluginSettings();
+    supabaseCilent = createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!);
+    return supabaseCilent;
+}
+
+async function initSupabaseVectorstore(): Promise<SupabaseVectorStore> {
+    const settings = getPluginSettings();
+    const supabase = getSupabaseClient();
     const embedding = new OpenAIEmbeddings({ apiKey: settings.apiKey });
     const vectorstore = await SupabaseVectorStore.fromExistingIndex(embedding, {
         client: supabase,
@@ -57,8 +69,7 @@ export async function buildPageVectors(uuid: string, includeLinkedPages: boolean
     const contents = await getPageContents(uuid, includeLinkedPages);
     const pageIds = contents.map((c) => c.page.uuid);
 
-    const settings = getPluginSettings();
-    const client = createClient(settings.supabaseProjectUrl!, settings.supabaseServiceKey!);
+    const client = getSupabaseClient();
 
     const { data, error } = await client.from('pages').select().in('uuid', pageIds);
     const pageUpdatedAt = data?.reduce((obj, p) => Object.assign(obj, { [p.uuid]: p.updated_at }), {});
@@ -84,7 +95,7 @@ export async function buildPageVectors(uuid: string, includeLinkedPages: boolean
         docs.push(...splittedBlocks);
     }
 
-    const vectorstore = await initSupabaseVectorstore(client);
+    const vectorstore = await initSupabaseVectorstore();
     await vectorstore.addDocuments(docs);
     await client.from('pages').upsert(
         contents.map((c) => {
