@@ -111,7 +111,7 @@ export function LogseqRAG() {
             }
             updateMessages((messages) => {
                 messages[messageLength + 1].content =
-                    output['answer'] === undefined ? 'Generating...' : output['answer'];
+                    output['cited_answer'] === undefined ? 'Generating...' : output['cited_answer']['answer'];
             });
             console.log(output);
         }

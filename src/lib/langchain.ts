@@ -1,4 +1,7 @@
 import '@logseq/libs';
+import { z } from 'zod';
+import { StructuredTool } from '@langchain/core/tools';
+import { formatToOpenAITool } from '@langchain/openai';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { ChatOpenAI } from '@langchain/openai';
 import { PromptTemplate } from '@langchain/core/prompts';
@@ -11,6 +14,8 @@ import { getPluginSettings } from './setting';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnablePassthrough, RunnableSequence, RunnableMap } from '@langchain/core/runnables';
 import { formatDocumentsAsString } from 'langchain/util/document';
+import { JsonOutputKeyToolsParser } from 'langchain/output_parsers';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { Client } from 'langsmith';
 
@@ -21,16 +26,38 @@ const createLangSmithCallback = (apiUrl: string, apiKey: string) =>
     });
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
+class CitedAnswer extends StructuredTool {
+    name = 'cited_answer';
+    description = 'Answer the user question based only on the given sources, and cite the sources used.';
+    schema = z.object({
+        answer: z.string()
+            .describe(`The answer with inline citation to the user question, which follow the following rules.
+1. Only answer with the contents provided. If none of the content answer the question, just say you don't know.
+2. Use three sentences maximum and keep the answer as concise as possible.
+3. After every sentence you write, add one source id in square brackets which's contnet justify the sentence most.
+        `),
+        citations: z.array(z.number()).describe('The integer IDs of the SPECIFIC sources which justify the answer.'),
+    });
+    constructor() {
+        super();
+    }
+    _call(input: z.infer<(typeof this)['schema']>): Promise<string> {
+        return Promise.resolve(JSON.stringify(input, null, 2));
+    }
+}
 
-const TEMPLATE = `Use the following pieces of context to answer the question at the end. If none of the context answer to the question, just say that you don't know, don't try to make up an answer. Use three sentences maximum and keep the answer as concise as possible. For every sentence you write, add one source id in square brackets of most relevant source at the end of the sentence.
+const citeTool = formatToOpenAITool(new CitedAnswer());
+const formatDocsWithId = (docs: Array<Document>): string => {
+    return docs.map((doc: Document, idx: number) => `[${idx}]\n${doc.pageContent}`).join('\n\n');
+};
 
-{context}
-
-Question: {question}
-
-Helpful Answer:`;
-
-const customRagPrompt = PromptTemplate.fromTemplate(TEMPLATE);
+const prompt = ChatPromptTemplate.fromMessages([
+    [
+        'system',
+        "You're a helpful AI assistant. Given a user question and some contents with source id in square brackets, answer the user question, and cite the sources used. Here are the real contents:\n\n{context}",
+    ],
+    ['human', '{question}'],
+]);
 
 async function initSupabaseVectorstore(client?: SupabaseClient): Promise<SupabaseVectorStore> {
     const settings = getPluginSettings();
@@ -122,25 +149,27 @@ export async function buildRagChatChain(includedPages: Array<PageEntity>): Promi
             docs.map((doc: Document, idx: number) => `Source ID: ${idx}\nContent: ${doc.pageContent}`).join('\n\n')
         );
     };
-    // const ragChainFromDocs = RunnableSequence.from([
-    //     RunnablePassthrough.assign({
-    //         context: (input) => formatDocumentsAsString(input.context),
-    //     }),
-    //     customRagPrompt,
-    //     llm,
-    //     new StringOutputParser(),
-    // ]);
-    const answerChain = customRagPrompt.pipe(llm).pipe(new StringOutputParser());
+    
+    const llmWithCiteTool = llm.bind({
+        tools: [citeTool],
+        tool_choice: citeTool,
+    });
+    const outputParser = new JsonOutputKeyToolsParser({
+        keyName: 'cited_answer',
+        returnSingle: true,
+    });
+    const answerChain = prompt.pipe(llmWithCiteTool).pipe(outputParser);
     const ragMap = RunnableMap.from({
         question: new RunnablePassthrough(),
         docs: retriever,
     });
-    const ragChain = ragMap
+
+    const ragWithCiteChain = ragMap
         .assign({
             context: (input: { docs: Array<Document> }) => formatDocsWithId(input.docs),
         })
-        .assign({ answer: answerChain })
-        .pick(['question', 'docs', 'answer']);
+        .assign({ cited_answer: answerChain });
+    // .pick(['question', 'docs', 'cited_answer', 'context']);
 
-    return ragChain;
+    return ragWithCiteChain;
 }
