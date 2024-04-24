@@ -1,4 +1,7 @@
 import '@logseq/libs';
+import { z } from 'zod';
+import { StructuredTool } from '@langchain/core/tools';
+import { formatToOpenAITool } from '@langchain/openai';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { ChatOpenAI } from '@langchain/openai';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
@@ -7,8 +10,8 @@ import { OpenAIEmbeddings } from '@langchain/openai';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import { getPageContents } from './logseq';
 import { getPluginSettings } from './setting';
-import { StringOutputParser } from '@langchain/core/output_parsers';
-import { RunnablePassthrough, Runnable, RunnableMap} from '@langchain/core/runnables';
+import { RunnablePassthrough, Runnable, RunnableMap } from '@langchain/core/runnables';
+import { JsonOutputKeyToolsParser } from 'langchain/output_parsers';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { Client } from 'langsmith';
@@ -18,6 +21,23 @@ const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 
 let supabaseCilent: SupabaseClient | null = null;
+
+class CitedAnswer extends StructuredTool {
+    name = 'cited_answer';
+    description = 'Answer the user question based only on the given sources, and cite the sources used.';
+    schema = z.object({
+        answer: z.string().describe(`The answer to the user question, which is based only on the given sources.`),
+        citations: z.array(z.number()).describe('The integer IDs of the SPECIFIC sources which justify the answer.'),
+    });
+    constructor() {
+        super();
+    }
+    _call(input: z.infer<(typeof this)['schema']>): Promise<string> {
+        return Promise.resolve(JSON.stringify(input, null, 2));
+    }
+}
+
+const citeTool = formatToOpenAITool(new CitedAnswer());
 
 const systemPrompt = `You're a helpful AI assistant. Given a user question and contents with source ID in square brackets, answer the user question  base on provided contents with following rules:
 1. Only answer with the contents provided. If none of the content answer the question, just say you don't know.
@@ -134,19 +154,26 @@ export async function buildRagChatChain(includedPages: Array<PageEntity>): Promi
         callbacks: callbacks,
     });
 
-    const answerChain = prompt
-        .pipe(llm)
-        .pipe(new StringOutputParser())
+    const llmWithCiteTool = llm.bind({
+        tools: [citeTool],
+        tool_choice: citeTool,
+    });
+    const outputParser = new JsonOutputKeyToolsParser({
+        keyName: 'cited_answer',
+        returnSingle: true,
+    });
+    const answerChain = prompt.pipe(llmWithCiteTool).pipe(outputParser);
     const ragMap = RunnableMap.from({
         question: new RunnablePassthrough(),
         docs: retriever,
     });
-    const ragChain = ragMap
+
+    const ragWithCiteChain = ragMap
         .assign({
             context: (input: { docs: Array<Document> }) => formatContextWithId(input.docs),
         })
-        .assign({ answer: answerChain })
-        .pick(['question', 'docs', 'answer']);
+        .assign({ cited_answer: answerChain })
+        .pick(['question', 'docs', 'cited_answer', 'context']);
 
-    return ragChain;
+    return ragWithCiteChain;
 }

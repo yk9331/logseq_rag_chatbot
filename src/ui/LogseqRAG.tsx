@@ -88,42 +88,25 @@ export function LogseqRAG() {
         updateMessages((messages) => {
             messages.push(userMessage);
         });
-        const systemMessage = { id: messageLength + 1, content: '', role: 'assistant' };
+        const systemMessage = { id: messageLength + 1, content: 'Generating...', role: 'assistant' };
         updateMessages((messages) => {
             messages.push(systemMessage);
         });
-        const output = {};
-        let currentKey: string | null = null;
-        for await (const chunk of await ragChain.stream(userMessage.content)) {
-            for (const key of Object.keys(chunk)) {
-                if (output[key] === undefined) {
-                    output[key] = chunk[key];
-                } else {
-                    output[key] += chunk[key];
-                }
-
-                if (key !== currentKey) {
-                    console.log(`\n\n${key}: ${JSON.stringify(chunk[key])}`);
-                } else {
-                    console.log(chunk[key]);
-                }
-                currentKey = key;
-            }
-            updateMessages((messages) => {
-                messages[messageLength + 1].content =
-                    output['answer'] === undefined ? 'Generating...' : output['answer'];
-            });
-            console.log(output);
-        }
+        const output = await ragChain.invoke(userMessage.content);
+        updateMessages((messages) => {
+            messages[messageLength + 1].docs = output['docs'];
+            messages[messageLength + 1].content = output['cited_answer']['answer'];
+            messages[messageLength + 1].citations = output['cited_answer']['citations'];
+        });
         setIsLoadingAnswer(false);
     }
 
-    const onClose = () => {
+    const onClose = (event, reason) => {
         setQuery('');
         // updateChatHistory([]);
         // updateAppState(defaultAppState);
         // updateChatState(defaultChatState);
-        updateMessages([]);
+        // updateMessages([]);
         logseq.hideMainUI({ restoreEditingCursor: true });
     };
 
@@ -140,7 +123,6 @@ export function LogseqRAG() {
                     margin: 'auto',
                     padding: '30px',
                     borderRadius: '10px',
-                    marginY: '30px',
                 }}
             >
                 <Box>
@@ -166,6 +148,7 @@ export function LogseqRAG() {
                         getOptionLabel={(option) => option.originalName}
                         value={selectedPage.page}
                         onChange={(event: any, page: PageEntity | null) => {
+                            updateMessages([]);
                             setSelectedPage((draft) => {
                                 draft.page = page;
                                 draft.isLoaded = false;
@@ -209,7 +192,6 @@ export function LogseqRAG() {
                     border={1}
                     borderRadius={1}
                     justifyContent="flex-start"
-                    // ref={messageContainerRef}
                 >
                     {messages.length > 0
                         ? [...messages].reverse().map((m) => {

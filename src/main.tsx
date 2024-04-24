@@ -1,6 +1,7 @@
 import '@logseq/libs';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { createTheme, ThemeProvider } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 
 import './ui/style.css';
@@ -37,11 +38,20 @@ async function main() {
     });
 
     // Main UI
+    const theme = createTheme({
+        palette: {
+            background: {
+                default: 'transparent',
+            },
+        },
+    });
     const root = ReactDOM.createRoot(document.getElementById('app')!);
     root.render(
         <React.StrictMode>
-            <CssBaseline />
-            <LogseqRAG />
+            <ThemeProvider theme={theme}>
+                <CssBaseline />
+                <LogseqRAG />
+            </ThemeProvider>
         </React.StrictMode>,
     );
 }
