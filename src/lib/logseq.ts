@@ -5,10 +5,10 @@ function isBlockEntity(b: BlockEntity | BlockUUIDTuple): b is BlockEntity {
 }
 
 async function getTreeContent(b: BlockEntity) {
-    let content = '';
+    const content = [];
     const trimmedBlockContent = b.content.trim();
     if (trimmedBlockContent.length > 0) {
-        content += trimmedBlockContent;
+        content.push({ uuid: b.uuid, content: trimmedBlockContent });
     }
 
     if (!b.children) {
@@ -17,13 +17,15 @@ async function getTreeContent(b: BlockEntity) {
 
     for (const child of b.children) {
         if (isBlockEntity(child)) {
-            content += await getTreeContent(child);
+            const blocks = await getTreeContent(child);
+            content.push(...blocks);
         } else {
             const childBlock = await logseq.Editor.getBlock(child[1], {
                 includeChildren: true,
             });
             if (childBlock) {
-                content += await getTreeContent(childBlock);
+                const blocks = await getTreeContent(childBlock);
+                content.push(...blocks);
             }
         }
     }
@@ -31,7 +33,7 @@ async function getTreeContent(b: BlockEntity) {
 }
 
 async function getPageContent(uuid: string): Promise<any> {
-    const blockContents = [];
+    const blocks = [];
     const ids = [];
 
     const page = await logseq.Editor.getPage(uuid);
@@ -41,22 +43,24 @@ async function getPageContent(uuid: string): Promise<any> {
 
     const pageBlocks = await logseq.Editor.getPageBlocksTree(page.name);
     for (const pageBlock of pageBlocks) {
-        const blockContent = await getTreeContent(pageBlock);
-        if (blockContent.length > 0) {
-            blockContents.push(blockContent);
-            ids.push(pageBlock.uuid);
+        const flattenBlocks = await getTreeContent(pageBlock);
+        for (const block of flattenBlocks) {
+            blocks.push(block.content);
+            ids.push(block.uuid);
         }
     }
-    return { page, ids, blockContents };
+    return { page, ids, blockContents: blocks };
 }
 
 async function getPageLinkedReferencesContent(uuid: string): Promise<any> {
     const pages = [];
     const refs = await logseq.Editor.getPageLinkedReferences(uuid);
-    for (const ref of refs!) {
-        if (ref[0]! && ref[0].name) {
-            const page = await getPageContent(ref[0].name);
-            pages.push(page);
+    if (refs) {
+        for (const ref of refs) {
+            if (ref[0]! && ref[0].name) {
+                const page = await getPageContent(ref[0].name);
+                pages.push(page);
+            }
         }
     }
     return pages;
