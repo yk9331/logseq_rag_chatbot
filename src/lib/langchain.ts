@@ -1,7 +1,6 @@
 import '@logseq/libs';
 import { RecursiveCharacterTextSplitter } from 'langchain/text_splitter';
 import { ChatOpenAI } from '@langchain/openai';
-import { PromptTemplate } from '@langchain/core/prompts';
 import { SupabaseClient, createClient } from '@supabase/supabase-js';
 import { SupabaseFilterRPCCall, SupabaseVectorStore } from '@langchain/community/vectorstores/supabase';
 import { OpenAIEmbeddings } from '@langchain/openai';
@@ -9,8 +8,8 @@ import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import { getPageContents } from './logseq';
 import { getPluginSettings } from './setting';
 import { StringOutputParser } from '@langchain/core/output_parsers';
-import { RunnablePassthrough, RunnableSequence, RunnableMap } from '@langchain/core/runnables';
-import { formatDocumentsAsString } from 'langchain/util/document';
+import { RunnablePassthrough, Runnable, RunnableMap} from '@langchain/core/runnables';
+import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
 import { Client } from 'langsmith';
 
@@ -20,15 +19,22 @@ const CHUNK_OVERLAP = 200;
 
 let supabaseCilent: SupabaseClient | null = null;
 
-const TEMPLATE = `Use the following pieces of context to answer the question at the end. If none of the context answer to the question, just say that you don't know, don't try to make up an answer. Use three sentences maximum and keep the answer as concise as possible. For every sentence you write, add one source id in square brackets of most relevant source at the end of the sentence.
+const systemPrompt = `You're a helpful AI assistant. Given a user question and contents with source ID in square brackets, answer the user question  base on provided contents with following rules:
+1. Only answer with the contents provided. If none of the content answer the question, just say you don't know.
+2. Use three sentences maximum and keep the answer as concise as possible.
+3. Add source id in [id] format of which's contnet justify the sentence most after the period to each sentence in answer.
 
-{context}
+Here are the contents:
+{context}`;
 
-Question: {question}
+const prompt = ChatPromptTemplate.fromMessages([
+    ['system', systemPrompt],
+    ['human', '{question}'],
+]);
 
-Helpful Answer:`;
-
-const customRagPrompt = PromptTemplate.fromTemplate(TEMPLATE);
+function formatContextWithId(docs: Array<Document>): string {
+    return docs.map((doc: Document, idx: number) => `[${idx}]\n${doc.pageContent}`).join('\n\n');
+}
 
 function createLangSmithCallback(apiUrl: string, apiKey: string) {
     return new LangChainTracer({
@@ -127,28 +133,17 @@ export async function buildRagChatChain(includedPages: Array<PageEntity>): Promi
         apiKey: settings.apiKey,
         callbacks: callbacks,
     });
-    const formatDocsWithId = (docs: Array<Document>): string => {
-        return (
-            '\n\n' +
-            docs.map((doc: Document, idx: number) => `Source ID: ${idx}\nContent: ${doc.pageContent}`).join('\n\n')
-        );
-    };
-    // const ragChainFromDocs = RunnableSequence.from([
-    //     RunnablePassthrough.assign({
-    //         context: (input) => formatDocumentsAsString(input.context),
-    //     }),
-    //     customRagPrompt,
-    //     llm,
-    //     new StringOutputParser(),
-    // ]);
-    const answerChain = customRagPrompt.pipe(llm).pipe(new StringOutputParser());
+
+    const answerChain = prompt
+        .pipe(llm)
+        .pipe(new StringOutputParser())
     const ragMap = RunnableMap.from({
         question: new RunnablePassthrough(),
         docs: retriever,
     });
     const ragChain = ragMap
         .assign({
-            context: (input: { docs: Array<Document> }) => formatDocsWithId(input.docs),
+            context: (input: { docs: Array<Document> }) => formatContextWithId(input.docs),
         })
         .assign({ answer: answerChain })
         .pick(['question', 'docs', 'answer']);
