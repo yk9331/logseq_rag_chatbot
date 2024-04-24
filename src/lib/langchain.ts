@@ -11,16 +11,14 @@ import { getPluginSettings } from './setting';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { RunnablePassthrough, RunnableSequence, RunnableMap } from '@langchain/core/runnables';
 import { formatDocumentsAsString } from 'langchain/util/document';
+import { LangChainTracer } from '@langchain/core/tracers/tracer_langchain';
+import { Client } from 'langsmith';
 
-export interface OpenAIOptions {
-    apiKey: string;
-    completionEngine?: string;
-    temperature?: number;
-    maxTokens?: number;
-    chatPrompt?: string;
-    completionEndpoint?: string;
-}
-
+const createLangSmithCallback = (apiUrl: string, apiKey: string) =>
+    new LangChainTracer({
+        projectName: 'logseq-rag',
+        client: new Client({ apiUrl, apiKey }),
+    });
 const CHUNK_SIZE = 1000;
 const CHUNK_OVERLAP = 200;
 
@@ -108,11 +106,15 @@ export async function buildRagChatChain(includedPages: Array<PageEntity>): Promi
     const settings = getPluginSettings();
     const vectorstore = await initSupabaseVectorstore();
     const retriever = await vectorstore.asRetriever(6, buildRPCPageFilter(includedPages));
-
+    const callbacks =
+        settings.langsmithAPIKey && settings.langsmithAPIUrl
+            ? [createLangSmithCallback(settings.langsmithAPIUrl, settings.langsmithAPIKey)]
+            : [];
     const llm = new ChatOpenAI({
         model: settings.completionEngine,
         temperature: settings.temperature,
         apiKey: settings.apiKey,
+        callbacks: callbacks,
     });
     const formatDocsWithId = (docs: Array<Document>): string => {
         return (

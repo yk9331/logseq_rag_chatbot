@@ -1,10 +1,16 @@
 import { SettingSchemaDesc } from '@logseq/libs/dist/LSPlugin';
-import { OpenAIOptions } from './langchain';
 
-interface PluginOptions extends OpenAIOptions {
-    injectPrefix?: string;
+interface PluginOptions {
     supabaseProjectUrl: string;
     supabaseServiceKey: string;
+    apiKey: string;
+    completionEngine?: string;
+    temperature?: number;
+    maxTokens?: number;
+    chatPrompt?: string;
+    completionEndpoint?: string;
+    langsmithAPIUrl?: string;
+    langsmithAPIKey?: string;
 }
 
 export const settingsSchema: SettingSchemaDesc[] = [
@@ -20,7 +26,7 @@ export const settingsSchema: SettingSchemaDesc[] = [
         type: 'string',
         default: '',
         title: 'Supabase Service Key',
-        description: 'Your Supabase project service key. You can create a project and get one at https://supabase.com'
+        description: 'Your Supabase project service key. You can create a project and get one at https://supabase.com',
     },
     {
         key: 'openAIKey',
@@ -69,6 +75,20 @@ export const settingsSchema: SettingSchemaDesc[] = [
             "The maximum amount of tokens to generate. Tokens can be words or just chunks of characters. The number of tokens processed in a given API request depends on the length of both your inputs and outputs. As a rough rule of thumb, 1 token is approximately 4 characters or 0.75 words for English text. One limitation to keep in mind is that your text prompt and generated completion combined must be no more than the model's maximum context length (for most models this is 2048 tokens, or about 1500 words).",
     },
     {
+        key: 'langsmithAPIUrl',
+        type: 'string',
+        default: '',
+        title: 'LangSmith API Url',
+        description: '',
+    },
+    {
+        key: 'langsmithAPIKey',
+        type: 'string',
+        default: '',
+        title: 'LangSmith API Key',
+        description: '',
+    },
+    {
         key: 'ragChatShortcut',
         type: 'string',
         default: 'mod+r mod+e',
@@ -87,7 +107,10 @@ export function getPluginSettings(): PluginOptions {
     const maxTokens = Number.parseInt(logseq.settings!['openAIMaxTokens']);
     const chatPrompt = logseq.settings!['chatPrompt'];
     const completionEndpoint = logseq.settings!['chatCompletionEndpoint'];
-    
+
+    const langsmithAPIUrl = logseq.settings!['langsmithAPIUrl'];
+    const langsmithAPIKey = logseq.settings!['langsmithAPIKey'];
+
     return {
         supabaseProjectUrl,
         supabaseServiceKey,
@@ -97,5 +120,7 @@ export function getPluginSettings(): PluginOptions {
         chatPrompt,
         temperature,
         maxTokens,
+        langsmithAPIUrl,
+        langsmithAPIKey,
     };
 }
