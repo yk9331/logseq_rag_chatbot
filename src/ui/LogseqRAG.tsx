@@ -13,6 +13,7 @@ import { LoadingMessage } from './components/LoadingMessage';
 import { ChatMessageBubble } from './components/ChatMessageBubble';
 import { IntermediateStep } from './components/IntermediateStep';
 import { buildPageVectors, buildRagChatChain } from '../lib/langchain';
+import { AIMessage, HumanMessage } from 'langchain/schema';
 
 const CHAT_TITLE = '🤖 Logseq Chatbot';
 const PLACEHOLDER = 'Ask me something about your Logseq page.';
@@ -32,6 +33,7 @@ export function LogseqRAG() {
     const [query, setQuery] = useState('');
     const [isLoadingAnswer, setIsLoadingAnswer] = useState<boolean>(false);
     const [messages, updateMessages] = useImmer<Array<any>>([]);
+    const [history, updateHistory] = useImmer<Array<any>>([]);
 
     useEffect(() => {
         if (visible) {
@@ -92,7 +94,13 @@ export function LogseqRAG() {
         updateMessages((messages) => {
             messages.push(systemMessage);
         });
-        const output = await ragChain.invoke(userMessage.content);
+        const output = await ragChain.invoke({ question: userMessage.content, chat_history: history });
+        updateHistory((draft) => {
+            draft.concat(new HumanMessage(userMessage.content), new AIMessage(output['cited_answer']['answer']));
+            if (draft.length > 6) {
+                draft.splice(0, 2);
+            }
+        });
         updateMessages((messages) => {
             messages[messageLength + 1].docs = output['docs'];
             messages[messageLength + 1].content = output['cited_answer']['answer'];
@@ -103,10 +111,6 @@ export function LogseqRAG() {
 
     const onClose = (event, reason) => {
         setQuery('');
-        // updateChatHistory([]);
-        // updateAppState(defaultAppState);
-        // updateChatState(defaultChatState);
-        // updateMessages([]);
         logseq.hideMainUI({ restoreEditingCursor: true });
     };
 
