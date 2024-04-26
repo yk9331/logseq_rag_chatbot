@@ -168,6 +168,7 @@ export function LogseqRAG() {
                         value={selectedPage.page}
                         onChange={(event: any, page: PageEntity | null) => {
                             updateMessages([]);
+                            updateHistory([]);
                             setSelectedPage((draft) => {
                                 draft.page = page;
                                 draft.isLoaded = false;
