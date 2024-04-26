@@ -3,12 +3,14 @@ A chatbot that utilizes the RAG technique can generate responses to user questio
 
 ## Features
 - Chat with your notes.
-
+![](./images/chat_1.gif)
+![](./images/chat_2.gif)
 - Answer sources citation with links to original note blocks.
-
+![](./images/citation.gif)
 - Contextualizing user question with chat history.
-
+![](./images/chat_history.gif)
 - Persistent vector storage on Supabase.
+- Prompt tracing with Langsmith
 
 ## How to get started
 1. Clone the repository 
