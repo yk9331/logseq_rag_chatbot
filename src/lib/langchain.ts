@@ -12,8 +12,25 @@ import { RunnablePassthrough, Runnable, RunnableBranch, RunnableSequence } from 
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { JsonOutputKeyToolsParser } from 'langchain/output_parsers';
+import { BaseMessage } from 'langchain/schema';
+import { Document } from 'langchain/document';
 import { getPageContents } from './logseq';
 import { getPluginSettings } from './setting';
+
+
+export interface ChatInput{
+    question: string,
+    chat_history?: BaseMessage[],
+}
+export interface ChatOutput {
+    question: string;
+    docs: Document[];
+    context: string;
+    cited_answer: {
+        answer: string;
+        citations: number[];
+    };
+}
 
 const LANGSMITH_PROJECT_NAME = 'logseq-rag';
 const CHUNK_SIZE = 1000;
@@ -111,7 +128,10 @@ export async function buildPageVectors(uuid: string, includeLinkedPages: boolean
     const { data, error } = await client.from('pages').select().in('uuid', pageIds);
     const pageUpdatedAt = data?.reduce((obj, p) => Object.assign(obj, { [p.uuid]: p.updated_at }), {});
     const updatedContent = contents.filter(
-        (c) => pageUpdatedAt[c.page.uuid] === undefined || c.page.updatedAt > pageUpdatedAt[c.page.uuid],
+        (c) =>
+            pageUpdatedAt[c.page.uuid] === undefined ||
+            c.page.updatedAt === undefined ||
+            c.page.updatedAt > pageUpdatedAt[c.page.uuid],
     );
     const updatedIds = updatedContent.map((c) => c.page.uuid);
     await client.from('documents').delete().in('metadata->>page_id', updatedIds);

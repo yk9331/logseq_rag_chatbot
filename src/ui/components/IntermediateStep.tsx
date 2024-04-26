@@ -1,9 +1,9 @@
 import React from 'react';
 import { useState } from 'react';
-import type { Message } from 'ai/react';
 import type { AgentStep } from 'langchain/schema';
+import { ChatMessage } from './ChatMessageBubble';
 
-export function IntermediateStep(props: { message: Message }) {
+export function IntermediateStep(props: { message: ChatMessage }) {
     const parsedInput: AgentStep = JSON.parse(props.message.content);
     const action = parsedInput.action;
     const observation = parsedInput.observation;

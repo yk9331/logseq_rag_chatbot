@@ -1,8 +1,17 @@
 import React from 'react';
 import '@logseq/libs';
+import { Document } from 'langchain/document';
 import { Box, Button, Typography } from '@mui/material';
 
-export function ChatMessageBubble(props: { message: any }) {
+export interface ChatMessage {
+    id: number;
+    role: 'user' | 'assistant' | 'system';
+    content: string;
+    docs?: Document[];
+    citations?: number[];
+}
+
+export function ChatMessageBubble(props: { message: ChatMessage }) {
     const { role, content, citations, docs } = props.message;
     const bgColor = role === 'user' ? '#87CEFA' : '#DCDCDC';
     const alignment = role === 'user' ? 'flex-end' : 'flex-start';
@@ -24,7 +33,7 @@ export function ChatMessageBubble(props: { message: any }) {
             <Box marginRight={2}>{prefix}</Box>
             <Box sx={{ display: 'flex', flexDirection: 'column', 'white-space': 'pre-wrap' }}>
                 <Typography variant="body1">{content}</Typography>
-                {citations && citations.length ? (
+                {docs && citations && citations.length ? (
                     <Box
                         sx={{ display: 'flex', flexDirection: 'column', 'white-space': 'pre-wrap', marginTop: '10px' }}
                     >
@@ -37,15 +46,17 @@ export function ChatMessageBubble(props: { message: any }) {
                                 marginX: '10px',
                             }}
                         >
-                            {citations.map((source, i) => {
+                            {citations.map((source: number, i: number) => {
                                 const doc = docs[source];
                                 return (
                                     <Button
                                         key={'source:' + i}
                                         onClick={async (e) => {
                                             const page = await logseq.Editor.getPage(doc.metadata.page_id);
-                                            logseq.Editor.scrollToBlockInPage(page.name, doc.metadata.block_id);
-                                            logseq.hideMainUI();
+                                            if (page) {
+                                                logseq.Editor.scrollToBlockInPage(page.name, doc.metadata.block_id);
+                                                logseq.hideMainUI();
+                                            }
                                         }}
                                         sx={{
                                             textTransform: 'none',

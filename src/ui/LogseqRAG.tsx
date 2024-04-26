@@ -2,7 +2,9 @@
 
 import React, { useEffect, useState } from 'react';
 import { useImmer } from 'use-immer';
-import { RunnableSequence } from '@langchain/core/runnables';
+import { Runnable } from '@langchain/core/runnables';
+
+import { AIMessage, HumanMessage, BaseMessage } from 'langchain/schema';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -10,18 +12,25 @@ import { Box, Checkbox, FormGroup, FormControlLabel, Typography, Button, Backdro
 
 import { useAppVisible } from '../lib/utils';
 import { LoadingMessage } from './components/LoadingMessage';
-import { ChatMessageBubble } from './components/ChatMessageBubble';
+import { ChatMessageBubble, ChatMessage } from './components/ChatMessageBubble';
 import { IntermediateStep } from './components/IntermediateStep';
-import { buildPageVectors, buildRagChatChain } from '../lib/langchain';
-import { AIMessage, HumanMessage } from 'langchain/schema';
+import { buildPageVectors, buildRagChatChain, ChatOutput } from '../lib/langchain';
 
 const CHAT_TITLE = '🤖 Logseq Chatbot';
 const PLACEHOLDER = 'Ask me something about your Logseq page.';
 
+interface pageState {
+    page: PageEntity | null;
+    includeLinkedPages: boolean;
+    isLoading: boolean;
+    isLoaded: boolean;
+    error: any;
+}
+
 export function LogseqRAG() {
     const visible = useAppVisible();
     const [pages, setPages] = useState<Array<PageEntity> | null>(null);
-    const [selectedPage, setSelectedPage] = useImmer({
+    const [selectedPage, setSelectedPage] = useImmer<pageState>({
         page: null,
         includeLinkedPages: true,
         isLoading: false,
@@ -29,11 +38,11 @@ export function LogseqRAG() {
         error: null,
     });
     const [includedPages, setIncludedPages] = useState<Array<PageEntity> | null>(null);
-    const [ragChain, setRagChain] = useState<RunnableSequence<any, string> | null>(null);
+    const [ragChain, setRagChain] = useState<Runnable<any, string> | null>(null);
     const [query, setQuery] = useState('');
     const [isLoadingAnswer, setIsLoadingAnswer] = useState<boolean>(false);
-    const [messages, updateMessages] = useImmer<Array<any>>([]);
-    const [history, updateHistory] = useImmer<Array<any>>([]);
+    const [messages, updateMessages] = useImmer<ChatMessage[]>([]);
+    const [history, updateHistory] = useImmer<BaseMessage[]>([]);
 
     useEffect(() => {
         if (visible) {
@@ -52,6 +61,9 @@ export function LogseqRAG() {
                     setSelectedPage((draft) => {
                         draft.isLoading = true;
                     });
+                    if (!selectedPage?.page) {
+                        return;
+                    }
                     const pages = await buildPageVectors(selectedPage.page.uuid, selectedPage.includeLinkedPages);
                     const chain = await buildRagChatChain(pages);
                     setIncludedPages(pages);
@@ -60,9 +72,9 @@ export function LogseqRAG() {
                         draft.isLoaded = true;
                         draft.isLoading = false;
                     });
-                } catch (e) {
+                } catch (error) {
                     setSelectedPage((draft) => {
-                        draft.error = e;
+                        draft.error = error;
                     });
                 }
             };
@@ -78,38 +90,39 @@ export function LogseqRAG() {
         );
     }
 
-    async function sendMessage(e) {
+    async function sendMessage(e: React.MouseEvent<HTMLElement>) {
         e.preventDefault();
         if (!ragChain || isLoadingAnswer) {
             return;
         }
         setIsLoadingAnswer(true);
         const messageLength = messages.length;
-        const userMessage = { id: messageLength, content: query, role: 'user' };
+        const userMessage: ChatMessage = { id: messageLength, content: query, role: 'user' };
         setQuery('');
         updateMessages((messages) => {
             messages.push(userMessage);
         });
-        const systemMessage = { id: messageLength + 1, content: 'Generating...', role: 'assistant' };
+        const systemMessage: ChatMessage = { id: messageLength + 1, content: 'Generating...', role: 'assistant' };
         updateMessages((messages) => {
             messages.push(systemMessage);
         });
-        const output = await ragChain.invoke({ question: userMessage.content, chat_history: history });
+        const output: any = await ragChain.invoke({ question: userMessage.content, chat_history: history });
+        const outputObj: ChatOutput = output as ChatOutput;
         updateHistory((draft) => {
-            draft.concat(new HumanMessage(userMessage.content), new AIMessage(output['cited_answer']['answer']));
+            draft.concat(new HumanMessage(userMessage.content), new AIMessage(outputObj['cited_answer']['answer']));
             if (draft.length > 6) {
                 draft.splice(0, 2);
             }
         });
         updateMessages((messages) => {
-            messages[messageLength + 1].docs = output['docs'];
-            messages[messageLength + 1].content = output['cited_answer']['answer'];
-            messages[messageLength + 1].citations = output['cited_answer']['citations'];
+            messages[messageLength + 1].docs = outputObj['docs'];
+            messages[messageLength + 1].content = outputObj['cited_answer']['answer'];
+            messages[messageLength + 1].citations = outputObj['cited_answer']['citations'];
         });
         setIsLoadingAnswer(false);
     }
 
-    const onClose = (event, reason) => {
+    const onClose = () => {
         setQuery('');
         logseq.hideMainUI({ restoreEditingCursor: true });
     };
@@ -148,7 +161,9 @@ export function LogseqRAG() {
                     <Autocomplete
                         id="page-selector"
                         sx={{ margin: 'auto', width: '600px' }}
-                        options={pages.filter((p) => !p['journal?']).sort((a, b) => b.updatedAt - a.updatedAt)}
+                        options={pages
+                            .filter((p) => !p['journal?'])
+                            .sort((a, b) => (b.updatedAt && a.updatedAt ? b.updatedAt - a.updatedAt : -1))}
                         getOptionLabel={(option) => option.originalName}
                         value={selectedPage.page}
                         onChange={(event: any, page: PageEntity | null) => {
@@ -156,7 +171,7 @@ export function LogseqRAG() {
                             setSelectedPage((draft) => {
                                 draft.page = page;
                                 draft.isLoaded = false;
-                                draft.error = false;
+                                draft.error = null;
                             });
                         }}
                         renderInput={(params) => (
