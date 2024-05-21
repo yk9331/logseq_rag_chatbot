@@ -17,6 +17,9 @@ dependencies:
   '@langchain/core':
     specifier: ^0.1.58
     version: 0.1.58
+  '@langchain/langgraph':
+    specifier: ^0.0.19
+    version: 0.0.19
   '@langchain/openai':
     specifier: ^0.0.28
     version: 0.0.28
@@ -1147,6 +1150,37 @@ packages:
       uuid: 9.0.1
       zod: 3.23.3
       zod-to-json-schema: 3.22.5(zod@3.23.3)
+    dev: false
+
+  /@langchain/core@0.1.63:
+    resolution: {integrity: sha512-+fjyYi8wy6x1P+Ee1RWfIIEyxd9Ee9jksEwvrggPwwI/p45kIDTdYTblXsM13y4mNWTiACyLSdbwnPaxxdoz+w==}
+    engines: {node: '>=18'}
+    dependencies:
+      ansi-styles: 5.2.0
+      camelcase: 6.3.0
+      decamelize: 1.2.0
+      js-tiktoken: 1.0.12
+      langsmith: 0.1.18
+      ml-distance: 4.0.1
+      mustache: 4.2.0
+      p-queue: 6.6.2
+      p-retry: 4.6.2
+      uuid: 9.0.1
+      zod: 3.23.3
+      zod-to-json-schema: 3.22.5(zod@3.23.3)
+    dev: false
+
+  /@langchain/langgraph@0.0.19:
+    resolution: {integrity: sha512-V0t40qbwUyzEpL3Q0jHPVTVljdLc3YJCHIF9Q+sw9HRWwfBO1nWJHHbCxgVzeJ2NsX1X/dUyNkq8LbSEsTYpTQ==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      better-sqlite3: ^9.5.0
+    peerDependenciesMeta:
+      better-sqlite3:
+        optional: true
+    dependencies:
+      '@langchain/core': 0.1.63
+      uuid: 9.0.1
     dev: false
 
   /@langchain/openai@0.0.28:
@@ -3847,6 +3881,12 @@ packages:
 
   /js-tiktoken@1.0.11:
     resolution: {integrity: sha512-PajXFLq2vx7/8jllQZ43vzNpAai/0MOVdJjW/UrNyJorNQRTjHrqdGJG/mjHVy7h9M6dW6CaG43eNLMYFkTh6w==}
+    dependencies:
+      base64-js: 1.5.1
+    dev: false
+
+  /js-tiktoken@1.0.12:
+    resolution: {integrity: sha512-L7wURW1fH9Qaext0VzaUDpFGVQgjkdE3Dgsy9/+yXyGEpBKnylTd0mU0bfbNkKDlXRb6TEsZkwuflu1B8uQbJQ==}
     dependencies:
       base64-js: 1.5.1
     dev: false

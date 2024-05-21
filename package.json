@@ -16,6 +16,7 @@
     "@emotion/styled": "^11.11.5",
     "@langchain/community": "^0.0.48",
     "@langchain/core": "^0.1.58",
+    "@langchain/langgraph": "^0.0.19",
     "@langchain/openai": "^0.0.28",
     "@logseq/libs": "^0.0.14",
     "@mui/icons-material": "^5.15.15",
