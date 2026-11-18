@@ -12,15 +12,16 @@ import { RunnablePassthrough, Runnable, RunnableBranch, RunnableSequence } from 
 import { ChatPromptTemplate, MessagesPlaceholder } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { JsonOutputKeyToolsParser } from 'langchain/output_parsers';
-import { BaseMessage } from 'langchain/schema';
+import { BaseMessage } from '@langchain/core/messages';
+import { START, END, StateGraph, StateGraphArgs } from '@langchain/langgraph';
+import { ToolNode } from '@langchain/langgraph/prebuilt';
 import { Document } from 'langchain/document';
 import { getPageContents } from './logseq';
 import { getPluginSettings } from './setting';
 
-
-export interface ChatInput{
-    question: string,
-    chat_history?: BaseMessage[],
+export interface ChatInput {
+    question: string;
+    chat_history?: BaseMessage[];
 }
 export interface ChatOutput {
     question: string;
@@ -170,7 +171,15 @@ export async function buildPageVectors(uuid: string, includeLinkedPages: boolean
     return contents.map((p) => p.page);
 }
 
-export async function buildRagChatChain(includedPages: Array<PageEntity>): Promise<Runnable<any, any, any>> {
+type GraphState = {
+    keys: Record<string, any>;
+};
+
+const graphState = {
+    keys: null,
+};
+
+export async function buildRagChatChain(includedPages: Array<PageEntity>): Promise<any> {
     const settings = getPluginSettings();
     const vectorstore = await initSupabaseVectorstore();
     const retriever = await vectorstore.asRetriever(6, buildRPCPageFilter(includedPages));
@@ -194,25 +203,69 @@ export async function buildRagChatChain(includedPages: Array<PageEntity>): Promi
         returnSingle: true,
     });
 
-    const ragChain = RunnableSequence.from([
-        RunnablePassthrough.assign({
-            docs: RunnableBranch.from([
-                [
-                    (input) => !input.chat_history || input.chat_history.length === 0,
-                    RunnableSequence.from([(input) => input.question, retriever]),
-                ],
-                RunnableSequence.from([contextualizeQPrompt, llm, new StringOutputParser(), retriever]),
-            ]),
-        }),
-        RunnablePassthrough.assign({
-            context: (input: { docs: Array<Document> }) => {
-                return formatContextWithId(input.docs);
-            },
-        }),
-        RunnablePassthrough.assign({
-            cited_answer: prompt.pipe(llmWithCiteTool).pipe(outputParser),
-        }),
-    ]);
+    async function retrieve(state: GraphState) {
+        console.log('---RETRIEVE---');
+        console.log(state);
+        const stateObject = state.keys;
+        const includedPages = stateObject.includedPages;
+        const question = stateObject.question;
 
-    return ragChain;
+        const retriever = await vectorstore.asRetriever(6, buildRPCPageFilter(includedPages));
+        const docs = await retriever.invoke(question);
+        return {
+            keys: {
+                ...stateObject,
+                docs,
+            },
+        };
+    }
+
+    async function generate(state: GraphState) {
+        console.log('---GENERATE---');
+        console.log(state);
+        const stateObject = state.keys;
+        const question = stateObject.question;
+        const docs = stateObject.docs;
+
+        const context = formatContextWithId(docs);
+        const cited_answer = await prompt.pipe(llmWithCiteTool).pipe(outputParser).invoke({ question, context });
+        return {
+            keys: {
+                ...stateObject,
+                context,
+                cited_answer,
+            },
+        };
+    }
+
+    const workflow = new StateGraph<GraphState, Partial<GraphState>, string>({ channels: graphState });
+    workflow.addNode('retrieve', retrieve);
+    workflow.addNode('generate', generate);
+
+    workflow.addEdge(START, 'retrieve');
+    workflow.addEdge('retrieve', 'generate');
+    workflow.addEdge('generate', END);
+    const app = workflow.compile();
+
+    // const ragChain = RunnableSequence.from([
+    //     RunnablePassthrough.assign({
+    //         docs: RunnableBranch.from([
+    //             [
+    //                 (input) => !input.chat_history || input.chat_history.length === 0,
+    //                 RunnableSequence.from([(input) => input.question, retriever]),
+    //             ],
+    //             RunnableSequence.from([contextualizeQPrompt, llm, new StringOutputParser(), retriever]),
+    //         ]),
+    //     }),
+    //     RunnablePassthrough.assign({
+    //         context: (input: { docs: Array<Document> }) => {
+    //             return formatContextWithId(input.docs);
+    //         },
+    //     }),
+    //     RunnablePassthrough.assign({
+    //         cited_answer: prompt.pipe(llmWithCiteTool).pipe(outputParser),
+    //     }),
+    // ]);
+
+    return app;
 }

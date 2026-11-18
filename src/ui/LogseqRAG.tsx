@@ -4,7 +4,7 @@ import React, { useEffect, useState } from 'react';
 import { useImmer } from 'use-immer';
 import { Runnable } from '@langchain/core/runnables';
 
-import { AIMessage, HumanMessage, BaseMessage } from 'langchain/schema';
+import { AIMessage, HumanMessage, BaseMessage } from '@langchain/core/messages';
 import { PageEntity } from '@logseq/libs/dist/LSPlugin';
 import TextField from '@mui/material/TextField';
 import Autocomplete from '@mui/material/Autocomplete';
@@ -38,7 +38,7 @@ export function LogseqRAG() {
         error: null,
     });
     const [includedPages, setIncludedPages] = useState<Array<PageEntity> | null>(null);
-    const [ragChain, setRagChain] = useState<Runnable<any, string> | null>(null);
+    const [ragChain, setRagChain] = useState<any | null>(null);
     const [query, setQuery] = useState('');
     const [isLoadingAnswer, setIsLoadingAnswer] = useState<boolean>(false);
     const [messages, updateMessages] = useImmer<ChatMessage[]>([]);
@@ -106,7 +106,7 @@ export function LogseqRAG() {
         updateMessages((messages) => {
             messages.push(systemMessage);
         });
-        const output: any = await ragChain.invoke({ question: userMessage.content, chat_history: history });
+        const output: any = await ragChain.invoke({ keys: { question: userMessage.content, chat_history: history } });
         const outputObj: ChatOutput = output as ChatOutput;
         updateHistory((draft) => {
             draft.concat(new HumanMessage(userMessage.content), new AIMessage(outputObj['cited_answer']['answer']));
